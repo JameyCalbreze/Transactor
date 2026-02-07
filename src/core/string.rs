@@ -1,3 +1,6 @@
+//! Basic utilities for working with Strings. This was written to assist with
+//! writing unit tests within other modules. Especially tests which require parsing of CSV data.
+
 use std::io::Read;
 
 /// Utility for testing CSV input for this binary
@@ -42,7 +45,7 @@ mod test {
 
     use anyhow::Result;
 
-    use crate::utils::StringReader;
+    use crate::core::string::StringReader;
 
     #[test]
     fn read_a_string() -> Result<()> {

@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub(crate) mod string;
+
 #[derive(Debug, Error)]
 enum Error {
     #[error("Failed to deserialize a transaction {0}")]
