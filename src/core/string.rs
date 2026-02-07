@@ -18,6 +18,12 @@ impl From<String> for StringReader {
     }
 }
 
+impl From<&str> for StringReader {
+    fn from(value: &str) -> Self {
+        StringReader::from(value.to_string())
+    }
+}
+
 impl Read for StringReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let bytes = self.inner.as_bytes();
@@ -63,6 +69,30 @@ mod test {
         reader.read(read_bytes.as_mut_slice())?;
 
         assert_eq!(read_bytes.as_slice(), s.as_bytes());
+
+        Ok(())
+    }
+
+    #[test]
+    fn sanity_check_partial_reads() -> Result<()> {
+        let s = "Hello World";
+
+        let r = StringReader::from(s);
+
+        // Only one byte will be present in this buffer. We'll read one byte at a time
+        let mut read_bytes = Vec::new();
+        read_bytes.push(0);
+
+        let mut reader = BufReader::new(r);
+
+        for _ in 0..s.len() {
+            let count = reader.read(read_bytes.as_mut_slice())?;
+            assert_eq!(count, 1);
+        }
+
+        // There should be no more bytes to read
+        let count = reader.read(read_bytes.as_mut_slice())?;
+        assert_eq!(count, 0);
 
         Ok(())
     }
