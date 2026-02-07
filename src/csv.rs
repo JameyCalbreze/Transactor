@@ -3,10 +3,10 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) mod string;
+use crate::ledger::Transaction;
 
 #[derive(Debug, Error)]
-enum Error {
+pub enum Error {
     #[error("Missing amount on a transaction {0}")]
     MissingAmount(String),
 
@@ -14,36 +14,28 @@ enum Error {
     UnknownTransactionType(String),
 }
 
-#[derive(Clone, Copy, PartialEq)]
-enum Transaction {
-    Deposit { client: u16, tx: u32, amount: f64 },
-    Withdrawal { client: u16, tx: u32, amount: f64 },
-    Dispute { client: u16, tx: u32 },
-    Resolve { client: u16, tx: u32 },
-    ChargeBack { client: u16, tx: u32 },
-}
-
+/// The struct we'll read out of our input file. 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CsvTransaction {
+pub struct CsvTransaction {
     #[serde(rename = "type")]
-    t: String,
-    client: u16,
-    tx: u32,
+    pub t: String,
+    pub client: u16,
+    pub tx: u32,
     // This field is not always present for all types
-    amount: Option<f64>,
+    pub amount: Option<f64>,
 }
 
-impl TryFrom<CsvTransaction> for Transaction {
-    type Error = crate::core::Error;
+impl TryInto<Transaction> for CsvTransaction {
+    type Error = crate::csv::Error;
 
-    fn try_from(value: CsvTransaction) -> Result<Self, Error> {
+    fn try_into(self) -> Result<Transaction, Error> {
         // Expand the value
         let CsvTransaction {
             t,
             client,
             tx,
             amount,
-        } = value;
+        } = self;
 
         match t.to_lowercase().as_str() {
             "deposit" => amount.map_or_else(
@@ -81,16 +73,32 @@ impl Display for CsvTransaction {
     }
 }
 
+/// Final output to standard out
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct CsvBalance {
+    client: u16,
+    available: f64,
+    held: f64,
+    total: f64,
+    locked: bool,
+}
+
+impl CsvBalance {
+    /// Get the CSV headers for writing these records out
+    pub fn headers() -> &'static[&'static str] {
+        &["client", "available", "held", "total", "locked"]
+    }
+}
+
 #[cfg(test)]
 mod test {
 
     use std::io::BufReader;
 
     use anyhow::{Result, anyhow};
-    use csv::{Reader, StringRecord};
-    use serde::Deserialize;
+    use csv::Reader;
 
-    use crate::core::{CsvTransaction, string::StringReader};
+    use crate::{csv::CsvTransaction, string::StringReader};
 
     static EXAMPLE_CSV: &str = r#"
 type, client, tx, amount
@@ -103,7 +111,7 @@ withdrawal, 2, 5, 3.0
 
     #[test]
     fn deserialize_example() -> Result<()> {
-        let reader = BufReader::new(StringReader::from(EXAMPLE_CSV.to_string()));
+        let reader = BufReader::new(StringReader::from(EXAMPLE_CSV));
 
         let mut csv_reader = Reader::from_reader(reader);
 

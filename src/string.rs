@@ -51,7 +51,7 @@ mod test {
 
     use anyhow::Result;
 
-    use crate::core::string::StringReader;
+    use crate::string::StringReader;
 
     #[test]
     fn read_a_string() -> Result<()> {
