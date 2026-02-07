@@ -14,7 +14,7 @@ pub enum Error {
     UnknownTransactionType(String),
 }
 
-/// The struct we'll read out of our input file. 
+/// The struct we'll read out of our input file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CsvTransaction {
     #[serde(rename = "type")]
@@ -85,7 +85,7 @@ struct CsvBalance {
 
 impl CsvBalance {
     /// Get the CSV headers for writing these records out
-    pub fn headers() -> &'static[&'static str] {
+    pub fn headers() -> &'static [&'static str] {
         &["client", "available", "held", "total", "locked"]
     }
 }
