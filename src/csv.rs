@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ledger::Transaction;
+use crate::ledger::{Transaction, balance::BalanceSnapshot};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -81,6 +81,18 @@ struct CsvBalance {
     held: f64,
     total: f64,
     locked: bool,
+}
+
+impl From<BalanceSnapshot> for CsvBalance {
+    fn from(value: BalanceSnapshot) -> Self {
+        Self {
+            client: value.client,
+            available: value.available,
+            held: value.held,
+            total: value.total,
+            locked: value.locked,
+        }
+    }
 }
 
 impl CsvBalance {
