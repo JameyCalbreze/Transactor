@@ -127,3 +127,37 @@ impl Balance {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use anyhow::{Result, anyhow};
+
+    use crate::ledger::balance::Balance;
+
+    #[test]
+    fn deposit_and_withdraw() -> Result<()> {
+        let mut b = Balance::new(0);
+
+        b.deposit(100f64)?;
+        b.withdraw(10f64)?;
+
+        assert_eq!(90f64, b.available());
+
+        Ok(())
+    }
+
+    #[test]
+    fn deposit_withdraw_hold() -> Result<()> {
+        let mut b = Balance::new(0);
+
+        b.deposit(100f64)?;
+        b.withdraw(10f64)?;
+
+        // Place a hold on the withdrawal
+        b.hold(2, -10f64)?;
+
+        assert_eq!(100f64, b.available());
+
+        Ok(())
+    }
+}

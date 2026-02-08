@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    default,
-    fmt::Display,
-};
+use std::{collections::HashMap, fmt::Display};
 
 use thiserror::Error;
 
@@ -23,6 +19,9 @@ pub enum Error {
 
     #[error("Unexpected transaction status: {0}")]
     UnexpectedTxStatus(TxStatus),
+
+    #[error("Client account is frozen: {0}")]
+    FrozenAccountError(Client),
 
     #[error(transparent)]
     BalanceError(#[from] balance::Error),
@@ -84,7 +83,7 @@ impl Transaction {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-enum TxStatus {
+pub enum TxStatus {
     /// All valid transactions are registered with an active status
     #[default]
     Active,
@@ -202,6 +201,11 @@ impl Ledger {
         // --- Attempt to Process ---
         let b = self.balance.get_mut(t.client()).expect("Initialized above");
 
+        // If the balance is locked this transaction will be ignored
+        if b.locked() {
+            Err(Error::FrozenAccountError(*t.client()))?;
+        }
+
         match &t {
             Transaction::Deposit { amount, .. } => {
                 b.deposit(*amount)?;
@@ -257,6 +261,7 @@ impl Ledger {
 
                     // Remove the hold from this entry on the balance.
                     b.apply_hold(*t.tx())?;
+                    b.lock_balance();
                 } else {
                     Err(Error::MissingTransaction(*t.tx()))?;
                 }
@@ -277,6 +282,174 @@ impl Ledger {
             let entry = Entry::new(t);
             self.transactions.push(entry);
         }
+
+        Ok(())
+    }
+
+    /// Get the balance of a client in the ledger. If the client has been registered
+    /// There will be a Some(balance) returned
+    pub fn get_available_balance(&self, client: Client) -> Option<f64> {
+        match self.balance.get(&client) {
+            Some(b) => Some(b.available()),
+            None => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use anyhow::{Result, anyhow};
+
+    use crate::ledger::{Ledger, Transaction};
+
+    #[test]
+    fn process_first_deposit() -> Result<()> {
+        let t = Transaction::Deposit {
+            client: 0,
+            tx: 1,
+            amount: 100f64,
+        };
+        let mut ledger = Ledger::new();
+
+        // Should succeed
+        ledger.process_transaction(t)?;
+
+        assert_eq!(100f64, ledger.get_available_balance(0).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn deposit_and_dispute() -> Result<()> {
+        let t1 = Transaction::Deposit {
+            client: 0,
+            tx: 1,
+            amount: 100f64,
+        };
+        let t2 = Transaction::Dispute { client: 0, tx: 1 };
+
+        let mut ledger = Ledger::new();
+
+        ledger.process_transaction(t1)?;
+        ledger.process_transaction(t2)?;
+
+        assert_eq!(0f64, ledger.get_available_balance(0).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn deposit_withdraw_dispute() -> Result<()> {
+        let t1 = Transaction::Deposit {
+            client: 0,
+            tx: 1,
+            amount: 100f64,
+        };
+        let t2 = Transaction::Withdrawal {
+            client: 0,
+            tx: 2,
+            amount: 10f64,
+        };
+        let t3 = Transaction::Dispute { client: 0, tx: 2 };
+
+        let mut ledger = Ledger::new();
+
+        ledger.process_transaction(t1)?;
+        ledger.process_transaction(t2)?;
+        ledger.process_transaction(t3)?;
+
+        assert_eq!(100f64, ledger.get_available_balance(0).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn deposit_withdraw_dispute_resolve() -> Result<()> {
+        let t1 = Transaction::Deposit {
+            client: 0,
+            tx: 1,
+            amount: 100f64,
+        };
+        let t2 = Transaction::Withdrawal {
+            client: 0,
+            tx: 2,
+            amount: 10f64,
+        };
+        let t3 = Transaction::Dispute { client: 0, tx: 2 };
+        let t4 = Transaction::Resolve { client: 0, tx: 2 };
+
+        let mut ledger = Ledger::new();
+
+        ledger.process_transaction(t1)?;
+        ledger.process_transaction(t2)?;
+        ledger.process_transaction(t3)?;
+        ledger.process_transaction(t4)?;
+
+        assert_eq!(90f64, ledger.get_available_balance(0).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn deposit_dispute_charge_back_no_other_actions_succeed() -> Result<()> {
+        let t1 = Transaction::Deposit {
+            client: 0,
+            tx: 1,
+            amount: 100f64,
+        };
+        let t2 = Transaction::Dispute { client: 0, tx: 1 };
+        let t3 = Transaction::Deposit {
+            client: 0,
+            tx: 2,
+            amount: 50f64,
+        };
+        let t4 = Transaction::ChargeBack { client: 0, tx: 1 };
+
+        let mut ledger = Ledger::new();
+
+        ledger.process_transaction(t1)?;
+        ledger.process_transaction(t2)?;
+        ledger.process_transaction(t3)?;
+        ledger.process_transaction(t4)?;
+
+        assert_eq!(50f64, ledger.get_available_balance(0).unwrap());
+
+        // At this point no further actions should succeed
+        assert!(
+            ledger
+                .process_transaction(Transaction::Deposit {
+                    client: 0,
+                    tx: 3,
+                    amount: 10f64
+                })
+                .is_err()
+        );
+        assert!(
+            ledger
+                .process_transaction(Transaction::Withdrawal {
+                    client: 0,
+                    tx: 4,
+                    amount: 40f64
+                })
+                .is_err()
+        );
+        assert!(
+            ledger
+                .process_transaction(Transaction::Dispute { client: 0, tx: 2 })
+                .is_err()
+        );
+        assert!(
+            ledger
+                .process_transaction(Transaction::Resolve { client: 0, tx: 2 })
+                .is_err()
+        );
+        assert!(
+            ledger
+                .process_transaction(Transaction::ChargeBack { client: 0, tx: 2 })
+                .is_err()
+        );
+
+        assert_eq!(50f64, ledger.get_available_balance(0).unwrap());
 
         Ok(())
     }
