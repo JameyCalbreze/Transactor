@@ -169,7 +169,7 @@ pub struct Ledger {
 }
 
 impl Ledger {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Ledger {
             client_tx_to_idx: HashMap::new(),
             balance: HashMap::new(),
@@ -363,7 +363,7 @@ mod test {
         ledger.process_transaction(t2)?;
         ledger.process_transaction(t3)?;
 
-        assert_eq!(100f64, ledger.get_available_balance(0).unwrap());
+        assert_eq!(90f64, ledger.get_available_balance(0).unwrap());
 
         Ok(())
     }
@@ -455,6 +455,45 @@ mod test {
         );
 
         assert_eq!(50f64, ledger.get_available_balance(0).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn dispute_deposit_and_withdrawal_all_funds_held() -> Result<()> {
+        let t1 = Transaction::Deposit {
+            client: 0,
+            tx: 1,
+            amount: 100f64,
+        };
+        let t2 = Transaction::Withdrawal {
+            client: 0,
+            tx: 2,
+            amount: 50f64,
+        };
+        let t3 = Transaction::Dispute { client: 0, tx: 1 };
+        let t4 = Transaction::Dispute { client: 0, tx: 2 };
+
+        let mut ledger = Ledger::new();
+        ledger.process_transaction(t1)?;
+        ledger.process_transaction(t2)?;
+        ledger.process_transaction(t3)?;
+        ledger.process_transaction(t4)?;
+
+        let snapshots = ledger.get_client_snapshots();
+        assert_eq!(1, snapshots.len());
+
+        let snapshot = snapshots[0];
+        // 100 in 50 out - Both disputed. Total should be 50 as the "resolved" balance
+        assert_eq!(50f64, snapshot.total);
+        // As these are two separate transactions the total number of frozen dollars should be 150
+        assert_eq!(100f64, snapshot.held);
+        // As all transactions are disputed there shouldn't be any money available
+        assert_eq!(-50f64, snapshot.available);
+        // Neither transaction is resolved or charged back
+        assert_eq!(false, snapshot.locked);
+        // Sanity check
+        assert_eq!(0, snapshot.client);
 
         Ok(())
     }

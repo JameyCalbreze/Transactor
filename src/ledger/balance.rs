@@ -64,10 +64,17 @@ impl Balance {
         self.total
     }
 
+    /// The total amount of money being held in place
+    /// As withdrawals are immediately removed from the client balance that money
+    /// is not considered held. It's considered withdrawn. To count it as held
+    /// would improperly increase the amount of money available for subsequent
+    /// withdrawals putting the account servicer at risk.
     pub fn held(&self) -> f64 {
         let mut total_held = 0f64;
         for v in self.holds.values() {
-            total_held += *v;
+            if *v > 0f64 {
+                total_held += *v
+            }
         }
         total_held
     }
@@ -149,7 +156,7 @@ impl Balance {
 
 #[cfg(test)]
 mod test {
-    use anyhow::{Result, anyhow};
+    use anyhow::Result;
 
     use crate::ledger::balance::Balance;
 
@@ -175,7 +182,7 @@ mod test {
         // Place a hold on the withdrawal
         b.hold(2, -10f64)?;
 
-        assert_eq!(100f64, b.available());
+        assert_eq!(90f64, b.available());
 
         Ok(())
     }

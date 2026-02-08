@@ -1,9 +1,16 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    io::{self, Write},
+};
 
+use csv::WriterBuilder;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ledger::{Transaction, balance::BalanceSnapshot};
+use crate::ledger::{
+    Transaction,
+    balance::{self, BalanceSnapshot},
+};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -12,6 +19,12 @@ pub enum Error {
 
     #[error("Unknown transaction type: {0}")]
     UnknownTransactionType(String),
+
+    #[error("I/O Error: {0}")]
+    IOError(#[from] io::Error),
+
+    #[error("CSV Serialization Error: {0}")]
+    CSVError(#[from] csv::Error),
 }
 
 /// The struct we'll read out of our input file.
@@ -83,8 +96,8 @@ struct CsvBalance {
     locked: bool,
 }
 
-impl From<BalanceSnapshot> for CsvBalance {
-    fn from(value: BalanceSnapshot) -> Self {
+impl From<&BalanceSnapshot> for CsvBalance {
+    fn from(value: &BalanceSnapshot) -> Self {
         Self {
             client: value.client,
             available: value.available,
@@ -100,6 +113,24 @@ impl CsvBalance {
     pub fn headers() -> &'static [&'static str] {
         &["client", "available", "held", "total", "locked"]
     }
+}
+
+/// Give a slice of snapshots of the client balances
+pub fn write_balances_to_file(
+    balances: &[BalanceSnapshot],
+    writer: impl Write,
+) -> Result<(), Error> {
+    let mut csv_writer = WriterBuilder::new().from_writer(writer);
+
+    for snapshot in balances {
+        let csv_balance = CsvBalance::from(snapshot);
+        csv_writer.serialize(csv_balance)?;
+    }
+
+    // Flush the contents of the writer
+    csv_writer.flush()?;
+
+    Ok(())
 }
 
 #[cfg(test)]

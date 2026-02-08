@@ -1,7 +1,7 @@
 //! Basic utilities for working with Strings. This was written to assist with
 //! writing unit tests within other modules. Especially tests which require parsing of CSV data.
 
-use std::io::Read;
+use std::io::{Read, Write};
 
 /// Utility for testing CSV input for this binary
 pub(crate) struct StringReader {
@@ -45,13 +45,48 @@ impl Read for StringReader {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StringWriter {
+    inner: String,
+}
+
+/// This is an unchecked UTF-8 lossy writer.
+/// This was written as a testing utility
+impl StringWriter {
+    /// Start writing into an empty string
+    fn new() -> Self {
+        StringWriter {
+            inner: String::new(),
+        }
+    }
+
+    /// Destroy the writer and return the inner string which is being built
+    fn take(self) -> String {
+        self.inner
+    }
+}
+
+impl Write for StringWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let s = String::from_utf8_lossy(buf);
+        self.inner.extend(s.chars());
+
+        Ok(buf.len())
+    }
+
+    /// There's no buffer required for this flush operation
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use std::io::{BufReader, Read};
+    use std::io::{BufReader, Read, Write};
 
     use anyhow::Result;
 
-    use crate::string::StringReader;
+    use crate::string::{StringReader, StringWriter};
 
     #[test]
     fn read_a_string() -> Result<()> {
@@ -93,6 +128,19 @@ mod test {
         // There should be no more bytes to read
         let count = reader.read(read_bytes.as_mut_slice())?;
         assert_eq!(count, 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn writer_test() -> Result<()> {
+        let s = "Hello World";
+
+        let mut w = StringWriter::new();
+
+        w.write_all(s.as_bytes())?;
+
+        assert_eq!(w.take().as_str(), s);
 
         Ok(())
     }
