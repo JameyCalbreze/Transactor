@@ -21,6 +21,15 @@ pub enum Error {
     NoHoldError(Tx),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BalanceSnapshot {
+    pub client: Client,
+    pub available: f64,
+    pub held: f64,
+    pub total: f64,
+    pub locked: bool,
+}
+
 /// Struct for tracking the underlying balance of a client
 #[derive(Debug, Clone)]
 pub struct Balance {
@@ -125,6 +134,16 @@ impl Balance {
         self.holds.remove(&tx);
 
         Ok(())
+    }
+
+    pub fn snapshot(&self) -> BalanceSnapshot {
+        BalanceSnapshot {
+            client: self.client,
+            available: self.available(),
+            held: self.held(),
+            total: self.total,
+            locked: self.locked,
+        }
     }
 }
 

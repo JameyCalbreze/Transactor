@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use thiserror::Error;
 
-use crate::ledger::balance::Balance;
+use crate::ledger::balance::{Balance, BalanceSnapshot};
 
 pub mod balance;
 
@@ -293,6 +293,11 @@ impl Ledger {
             Some(b) => Some(b.available()),
             None => None,
         }
+    }
+
+    /// For all of the registered clients within the ledger take a snapshot of their balance and return it in a vector
+    pub fn get_client_snapshots(&self) -> Vec<BalanceSnapshot> {
+        self.balance.values().map(|b| b.snapshot()).collect()
     }
 }
 
