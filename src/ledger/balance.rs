@@ -10,6 +10,15 @@ use crate::ledger::{Client, Tx};
 pub enum Error {
     #[error("Insufficient funds")]
     InsufficientFunds,
+
+    #[error("Account locked")]
+    AccountLocked,
+
+    #[error("Tx Already Held: {0}")]
+    MultiHoldError(Tx),
+
+    #[error("No hold on Tx: {0}")]
+    NoHoldError(Tx),
 }
 
 /// Struct for tracking the underlying balance of a client
@@ -29,7 +38,7 @@ pub struct Balance {
 }
 
 impl Balance {
-    fn new(client: Client) -> Self {
+    pub fn new(client: Client) -> Self {
         Balance {
             client,
             total: 0f64,
@@ -38,15 +47,15 @@ impl Balance {
         }
     }
 
-    fn available(&self) -> f64 {
+    pub fn available(&self) -> f64 {
         self.total - self.held()
     }
 
-    fn total(&self) -> f64 {
+    pub fn total(&self) -> f64 {
         self.total
     }
 
-    fn held(&self) -> f64 {
+    pub fn held(&self) -> f64 {
         let mut total_held = 0f64;
         for v in self.holds.values() {
             total_held += *v;
@@ -54,11 +63,67 @@ impl Balance {
         total_held
     }
 
-    fn locked(&self) -> bool {
+    pub fn locked(&self) -> bool {
         self.locked
     }
 
-    fn lock_balance(&mut self) {
+    pub fn lock_balance(&mut self) {
         self.locked = true;
+    }
+
+    /// Add funds to this balance
+    pub fn deposit(&mut self, amount: f64) -> Result<(), Error> {
+        if self.locked {
+            Err(Error::AccountLocked)?
+        }
+
+        self.total += amount;
+
+        Ok(())
+    }
+
+    pub fn withdraw(&mut self, amount: f64) -> Result<(), Error> {
+        if self.total < amount {
+            Err(Error::InsufficientFunds)?
+        }
+
+        if self.locked {
+            Err(Error::AccountLocked)?
+        }
+
+        self.total -= amount;
+
+        Ok(())
+    }
+
+    pub fn hold(&mut self, tx: Tx, amount: f64) -> Result<(), Error> {
+        if self.holds.contains_key(&tx) {
+            Err(Error::MultiHoldError(tx))?;
+        }
+
+        self.holds.insert(tx, amount);
+
+        Ok(())
+    }
+
+    pub fn remove_hold(&mut self, tx: Tx) -> Result<(), Error> {
+        if !self.holds.contains_key(&tx) {
+            Err(Error::NoHoldError(tx))?;
+        }
+
+        self.holds.remove(&tx);
+
+        Ok(())
+    }
+
+    pub fn apply_hold(&mut self, tx: Tx) -> Result<(), Error> {
+        if !self.holds.contains_key(&tx) {
+            Err(Error::NoHoldError(tx))?;
+        }
+
+        self.total -= self.holds.get(&tx).expect("Checked in if clause");
+        self.holds.remove(&tx);
+
+        Ok(())
     }
 }
