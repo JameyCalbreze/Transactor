@@ -60,10 +60,6 @@ impl Balance {
         self.total - self.held()
     }
 
-    pub fn total(&self) -> f64 {
-        self.total
-    }
-
     /// The total amount of money being held in place
     /// As withdrawals are immediately removed from the client balance that money
     /// is not considered held. It's considered withdrawn. To count it as held

@@ -1,17 +1,16 @@
-use std::{
-    fs::OpenOptions,
-    io::{BufReader, BufWriter},
-};
+use std::{fs::OpenOptions, io::BufReader};
 
 use ::csv::ReaderBuilder;
 
 use crate::{
     csv::{CsvTransaction, write_balances_to_file},
-    ledger::{Ledger, Transaction},
+    ledger::Ledger,
 };
 
 mod csv;
 mod ledger;
+
+#[cfg(test)]
 mod string;
 
 fn main() {
@@ -26,7 +25,7 @@ fn main() {
         args[i].clone()
     };
 
-    let mut f = OpenOptions::new()
+    let f = OpenOptions::new()
         .read(true)
         .write(false)
         .create(false)

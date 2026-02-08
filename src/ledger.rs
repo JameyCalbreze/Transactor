@@ -14,9 +14,6 @@ pub enum Error {
     #[error("Missing transaction id: {0}")]
     MissingTransaction(Tx),
 
-    #[error("No initial deposit for client: {0}")]
-    NoInitialDeposit(Client),
-
     #[error("Unexpected transaction status: {0}")]
     UnexpectedTxStatus(TxStatus),
 
@@ -64,11 +61,6 @@ impl Transaction {
             Transaction::Resolve { tx, .. } => tx,
             Transaction::ChargeBack { tx, .. } => tx,
         }
-    }
-
-    /// Check if this transaction is a deposit
-    pub fn is_deposit(&self) -> bool {
-        matches!(self, &Transaction::Deposit { .. })
     }
 
     fn key(&self) -> (Client, Tx) {
@@ -192,9 +184,7 @@ impl Ledger {
         }
 
         // Return early if there is no balance for this client on non-deposit transactions
-        if !t.is_deposit() && !self.balance.contains_key(t.client()) {
-            Err(Error::NoInitialDeposit(*t.client()))?
-        } else if !self.balance.contains_key(t.client()) {
+        if !self.balance.contains_key(t.client()) {
             self.balance.insert(*t.client(), Balance::new(*t.client()));
         }
 
@@ -288,6 +278,7 @@ impl Ledger {
 
     /// Get the balance of a client in the ledger. If the client has been registered
     /// There will be a Some(balance) returned
+    #[cfg(test)]
     pub fn get_available_balance(&self, client: Client) -> Option<f64> {
         match self.balance.get(&client) {
             Some(b) => Some(b.available()),
@@ -303,7 +294,7 @@ impl Ledger {
 
 #[cfg(test)]
 mod test {
-    use anyhow::{Result, anyhow};
+    use anyhow::Result;
 
     use crate::ledger::{Ledger, Transaction};
 

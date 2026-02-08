@@ -7,10 +7,7 @@ use csv::WriterBuilder;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ledger::{
-    Transaction,
-    balance::{self, BalanceSnapshot},
-};
+use crate::ledger::{Transaction, balance::BalanceSnapshot};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -105,13 +102,6 @@ impl From<&BalanceSnapshot> for CsvBalance {
             total: value.total,
             locked: value.locked,
         }
-    }
-}
-
-impl CsvBalance {
-    /// Get the CSV headers for writing these records out
-    pub fn headers() -> &'static [&'static str] {
-        &["client", "available", "held", "total", "locked"]
     }
 }
 
